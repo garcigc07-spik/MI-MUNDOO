@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nuestro Universo Interactivo</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000005;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+    }
+    #ui {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 95%;
+      max-width: 650px;
+    }
+    button, label.btn-upload {
+      background: rgba(255, 105, 180, 0.25);
+      border: 1px solid #ff69b4;
+      color: white;
+      padding: 10px 18px;
+      border-radius: 30px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 15px rgba(255, 105, 180, 0.3);
+      -webkit-tap-highlight-color: transparent;
+      font-size: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button:hover, label.btn-upload:hover {
+      background: rgba(255, 105, 180, 0.8);
+      transform: scale(1.05);
+      box-shadow: 0 0 25px rgba(255, 105, 180, 0.8);
+    }
+    button.active-delete {
+      background: rgba(255, 0, 85, 0.9) !important;
+      border-color: #ff0055 !important;
+      box-shadow: 0 0 20px #ff0055 !important;
+      animation: pulse 1s infinite alternate;
+    }
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.08); }
+    }
+    #planet-info {
+      position: absolute;
+      top: 20px;
+      width: 100%;
+      text-align: center;
+      color: #ffffff;
+      pointer-events: none;
+    }
+    #planet-title {
+      font-size: 2.2rem;
+      font-weight: bold;
+      text-shadow: 0 0 10px #ff69b4, 0 0 20px #ff69b4;
+      margin: 0;
+    }
+    #welcome-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92);
+      z-index: 200;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      cursor: pointer;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    #welcome-screen h1 {
+      font-size: 2.8rem;
+      color: #ff69b4;
+      text-shadow: 0 0 20px #ff69b4;
+      margin-bottom: 10px;
+    }
+    #modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.88);
+      z-index: 300;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      backdrop-filter: blur(10px);
+    }
+    #modal img, #modal video {
+      max-width: 85%;
+      max-height: 70%;
+      border-radius: 15px;
+      box-shadow: 0 0 35px #ff69b4;
+      border: 2px solid #ff69b4;
+    }
+    #modal p {
+      color: white;
+      margin-top: 15px;
+      font-size: 1rem;
+      opacity: 0.8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="welcome-screen" onclick="iniciarExperiencia()">
+    <h1>✨ Nuestro Universo ✨</h1>
+    <h1 style="font-size: 3.5rem; margin: 10px 0;">🫂</h1>
+    <p>Haz clic o toca la pantalla para comenzar</p>
+  </div>
+
+  <div id="planet-info">
+    <h1 id="planet-title">El Sol</h1>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div id="ui">
+    <button id="btn-audio">⏸ Música</button>
+    <button id="btn-next">🪐 Planeta</button>
+    <label for="input-media" class="btn-upload">📸 Foto/Video</label>
+    <input type="file" id="input-media" accept="image/*,video/*" style="display:none;">
+    <button id="btn-add-word">✨ Palabra</button>
+    <button id="btn-delete-mode">🗑️ Eliminar</button>
+  </div>
+
+  <div id="modal" onclick="cerrarModal()">
+    <img id="modal-img" style="display:none;" alt="Foto Ampliada">
+    <video id="modal-video" controls playsinline muted autoplay loop style="display:none;"></video>
+    <p>🤍 SIEMPRE SERÁS EL AMOR DE MI VIDA 🤍</p>
+  </div>
+
+  <audio id="musica" loop>
+    <source id="audio-source" src="" type="audio/mpeg">
+  </audio>
+
+  <!-- Bibliotecas 3D -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+
+  <!-- Script principal con Firebase integrado -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Configuración de tu Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyA6XDhnohAQTr87miVGcfxCjx3hKaLQ5UbE",
+      authDomain: "mi-universo-55924.firebaseapp.com",
+      projectId: "mi-universo-55924",
+      storageBucket: "mi-universo-55924.appspot.com",
+      messagingSenderId: "368492805055",
+      appId: "1:368492805055:web:2eae0f7a3a6cf4dad67f0a",
+      measurementId: "G-V3Z5ZQKRZX"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let modoEliminar = false;
+
+    function generatePlanetTexture(baseColorHex, detailColorHex, type = 'planet') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = baseColorHex;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (type === 'sun') {
+        const grad = ctx.createRadialGradient(512, 256, 10, 512, 256, 500);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.2, '#ffcc00');
+        grad.addColorStop(0.8, '#ff3300');
+        grad.addColorStop(1, '#990000');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else {
+        for (let i = 0; i < 80; i++) {
+          ctx.fillStyle = detailColorHex;
+          ctx.globalAlpha = Math.random() * 0.3;
+          ctx.fillRect(0, Math.random() * canvas.height, canvas.width, Math.random() * 40 + 5);
+        }
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createBadgeSprite(text, colorHex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = colorHex;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(10, 10, 236, 44, 20);
+      else ctx.rect(10, 10, 236, 44);
+      ctx.fill();
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      ctx.font = 'Bold 22px Arial';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 128, 38);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(3.5, 0.9, 1);
+      return sprite;
+    }
+
+    function createTextSprite(text) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const fontStyle = 'Bold 24px Arial';
+      ctx.font = fontStyle;
+      const textWidth = ctx.measureText(text).width;
+      canvas.width = Math.max(256, Math.ceil(textWidth + 40));
+      canvas.height = 64;
+
+      ctx.font = fontStyle;
+      ctx.fillStyle = '#ffb6c1';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sprite = new THREE.Sprite(spriteMat);
+      const aspect = canvas.width / canvas.height;
+      sprite.scale.set(1.5 * aspect, 1.5, 1);
+      sprite.userData = { isWord: true, text: text };
+      return sprite;
+    }
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+    camera.position.set(0, 50, 150);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    scene.add(new THREE.PointLight(0xffffff, 2, 3000));
+
+    // Estrellas
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 8000;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i += 3) {
+      starPositions[i] = (Math.random() - 0.5) * 3000;
+      starPositions[i + 1] = (Math.random() - 0.5) * 3000;
+      starPositions[i + 2] = (Math.random() - 0.5) * 3000;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starField = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true, opacity: 0.9 }));
+    scene.add(starField);
+
+    const textureLoader = new THREE.TextureLoader();
+
+    // DATOS DE LOS PLANETAS CON TODAS SUS PALABRAS ORIGINALES
+    const sistemaSolarData = [
+      {
+        nombre: "El Sol",
+        radio: 20,
+        distancia: 0,
+        textura: generatePlanetTexture('#ffaa00', '#ff2200', 'sun'),
+        esSol: true,
+        audio: 'cancion_inicio.mp3',
+        palabras: ["NUESTRO CENTRO DE AMOR", "MI LUZ❣️", "ETERNIDAD", "MI SOLECITO🥰", "NUESTRO CENTRO DE AMOR", "MI LUZ❣️", "MI ENERGÍA💫", "EL INICIO DE NUESTRO AMOR🥰", "FUEGO Y PASIÓN", "EXPLOSION DE SENTIMIENTOS", "ETERNIDAD", "EL BRILLO QUE LE DAS A MIS OJOS😍", "HACES QUE TODO LO BONITO TENGA MAS SENTIDO❤️‍🔥", "SIMPLE MENTE GRACIAS POR EXISTIR Y COINCIDIR CONTIGO💏", "MI INEFABLE AMOR", "TU SONRISA ILUMINO MI MUNDO DESDE EL PRIMER INSTANTE😍", "TE ELIJO HOY, MAÑANA Y EN CADA UNO DE MIS VIDAS", "TE MERECES TODO ELUNIVERSO🌌", "NINGÚN ADIÓS TIENE LA FUERZA SUFICIENTE PARA BORRAR TODO LO QUE SENTIMOS💏", "ERES Y SEGUIRÁS SIENDO EL AMOR DE MI VIDA SIN IMPORTAR EL TIEMPO O LA DISTANCIA🤍"],
+        fotos: ['foto1.jpg'],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Mercurio",
+        radio: 4,
+        distancia: 60,
+        textura: generatePlanetTexture('#8c8c8c', '#404040'),
+        audio: 'cancion1.mp3',
+        palabras: ["MI CERCANÍA🥰", "MIS PENSAMIENTOS💭", "TE AMO PARA TODA LA VIDA🤍", "MI FUERZA", "MI MOMENTO DE INSPIRACION❤️‍🩹", "MI TIEMPO DE RELAJACION☺️", "NO HAY DISTANCIA NI TIEMPO LO QUE APAGUE TODO LO QUE ME HACES SENTIR💞", "CADA MOMENTO A TU LADO SE CONVIERTE EN MI RECUERDO FAVORITO💏"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Venus",
+        radio: 6,
+        distancia: 100,
+        textura: generatePlanetTexture('#e3bb76', '#a17438'),
+        audio: 'cancion2.mp3',
+        palabras: ["MI BELLEZA👸", "MI PASIÓN❤️‍🔥", "MI DULZURA", "MI PUREZA🤍", "MI PASIÓN❤️‍🔥", "MI MAGIA🧙‍♀️", "DÍA A DÍA TE AMO", "AMO COMO BRILLAS✨", "AMO TODO DE TI💕", "QUIERO ABRAZARTE🫂", "QUIERO LLENARTE DE BESOS🥰", "QUIERO ESCUCHAR TU RISA😄",  "EXTRAÑO TODO DE TI🤍"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Tierra",
+        radio: 7,
+        distancia: 150,
+        textura: generatePlanetTexture('#1b5e20', '#0288d1'),
+        audio: 'cancion3.mp3',
+        palabras: ["NUESTRO HOGAR🏠", "POR SIEMPRE JUNTOS", "MI DESTINO MARCADO🥰", "AMO TUS ABRAZOS🫂", "AMO TUS RISAS😄", "RECUERDOS MARCADOS💋", "AMO TODO DE TI MI BBITA HERMOSA❤️‍🩹", "Eres el lugar al que siempre quiero volver❤️‍🩹", "MI PERSONA FAVORITA EN TODO EL UNIVERSO🥰", "EN CADA UNO DE MIS SUEÑOS SIEMPRE APARECES TÚ💭", "PERDERME EN TU MIRADA ES MI FORMA FAVORITA DE VIAJAR🧑‍🚀", "ERES LA MELODÍA QUE NUNCA ME CANSO DE ESCUCHAR💓", "MI CORAZÓN TE RECONOCIÓ INCLUSO ANTES DE CONOCERTE🤍"],
+        fotos: [],
+        videos: [],
+        lunas: [{ nombre: "Luna", radio: 1.8, distancia: 14, color: '#cccccc' }]
+      },
+      {
+        nombre: "Marte",
+        radio: 5,
+        distancia: 200,
+        textura: generatePlanetTexture('#b71c1c', '#3e2723'),
+        audio: 'cancion4.mp3',
+        palabras: ["NUESTROS MOMENTOS JUNTOS(●'◡'●)", "MI SUEÑO DE AMOR❤️", "SUEÑOS LINDOS", "EL AMOR DE MI VIDA😍", "TU MIRADA DULCE🍬🫣", "TUS ENCANTOS ME ATRAEN💏",  "AMO EL BRILLO DE TUS OJITOS✨🥺", "AMO TODO DE TI💏", "MI BBITA HERMOSA🥰", "TUS DULCES BESOS💋", "AMARTE ES LA DECISIÓN MÁS FÁCIL Y BONITA QUE TOMO TODOS LOS DÍAS🫂", "MI UNIVERSO ENTERO GIRA EN TORNO A TU EXISTENCIA🌌", "ERES EL SUEÑO DEL QUE NUNCA QUIERO DESPERTAR💭", "VÁMONOS DONDE EL TIEMPO NO EXISTA Y PODAMOS QUERERNOS SIN LAS REGLAS DE ESTE MUNDO🫳"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Júpiter",
+        radio: 14,
+        distancia: 270,
+        textura: generatePlanetTexture('#d7ccc8', '#a1887f'),
+        audio: 'cancion5.mp3',
+        palabras: ["TE AMO HASTA EL INFINITO♾️", "MI INSPIRACION TOTAL☺️", "MI FUERZA🫳", "MI UNIVERSO💕", "MI GRANDEZA✨", "MI MAS GRANDE ANHELO", "MI BELLA MUJER🧑‍🤝‍🧑", "LA PRINCESA DE MIS SUEÑOS👑💞", "EL MOTIVO DE MIS ALEGRIAS☺️", "MI MUSHASHA HERMOSA🫣", "LA MIEL QUE ENDULZA MI VIDA🍯"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Saturno",
+        radio: 11,
+        distancia: 350,
+        tieneAnillo: true,
+        textura: generatePlanetTexture('#ffe082', '#ffb300'),
+        audio: 'cancion6.mp3',
+        palabras: ["💞SOMOS DOS ANILLOS DE AMOR💞", "LA ETERNIDAD DE MI AMOR POR TI✨", "MI MAGIA💫", "AMO PASAR TIEMPO CONTIGO🥰", "LA ELEGANCIA QUE LE DAS A MI VIDA🧑‍🤝‍🧑", "MI SUEÑO ETERNO🫴🫲", "LA FELICIDAD DE HABERTE ENCONTRADO🤗", "SIEMPRE SERAS TU❤️‍🩹", "MI INEFABLE AMOR🤍", "ERES EL LUGAR AL QUE SIEMPRE QUIERO VOLVER🫂", "ERES LA COINCIDENCIA MÁS HERMOSA DE MI VIDA🤍", "ERES LA PARTE MÁS BONITA DE MI"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Urano",
+        radio: 8,
+        distancia: 420,
+        textura: generatePlanetTexture('#80deea', '#0097a7'),
+        audio: 'cancion7.mp3',
+        palabras: ["MI CALMA🤍", "MI LUZ✨", "MI CIELO AZUL💙", "MI PAZ🤍", "MI SERENIDAD", "MI CAMINO🧑‍🤝‍🧑", "EXTRAÑO TODO DE TI🫂", "ADMIRO TODO LO QUE ERES Y TODO LO QUE HACES❤️‍🩹", "TIENES LA SONRISA MÁS HERMOSA DEL MUNDO☺️", "CONTIGO APRENDÍ LO QUE REALMENTE SIGNIFICA AMAR❤️‍🔥", "MI CORAZÓN TE PERTENECE DESDE EL PRIMER DÍA💏", "NADA CAMBIARÍA DE TODO LO QUE HEMOS VIVIDO👑", "AMARTE ES LO MÁS NATURAL Y BONITO QUE ME HA PASADO💞", "SIEMPRE VAS A SER MI ELECCIÓN🤍", "CONTIGO APRENDÍ QUE EL AMOR NO TIENE LÍMITES🧑‍🚀"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      },
+      {
+        nombre: "Neptuno",
+        radio: 8,
+        distancia: 490,
+        textura: generatePlanetTexture('#3f51b5', '#1a237e'),
+        audio: 'cancion8.mp3',
+        palabras: ["LA PROFUNDIDAD DE MIS SENTIMIENTOS🥰", "MI MAR DE BESOS🌊💋", "AMO TODO DE TI🤍", "AMO TUS OJITOS COLOR A MIEL🥺", "AMO ESCUCHAR TU VOZ🎶", "QUIERO QUEDARME CONTIGO PARA SIEMPRE❣️", "MI SER AMADA👰🤵",  "SIEMPRE CONTARAS CONMIGO", "CERCAS O LEJOS TE AMARE POR TODA LA VIDA🤍", "NO HAY DISTANCIA NI TIEMPO QUE APAGUE LO QUE ME HACES SENTIR💏", "NADA SE COMPARA A ESTAR CONTIGO❤️‍🩹"],
+        fotos: [],
+        videos: [],
+        lunas: []
+      }
+    ];
+
+    const planetMeshes = [];
+    const interactiveObjects = [];
+    const mediaGroupsToOrient = [];
+    const wordGroups = [];
+    const moonsList = [];
+    const videoElements3D = [];
+
+    sistemaSolarData.forEach((data, index) => {
+      const group = new THREE.Group();
+      const geo = new THREE.SphereGeometry(data.radio, 64, 64);
+      const mat = data.esSol ? new THREE.MeshBasicMaterial({ map: data.textura }) : new THREE.MeshStandardMaterial({ map: data.textura, roughness: 0.4 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData = { index: index, isBody: true };
+      group.add(mesh);
+
+      if (data.tieneAnillo) {
+        const ringGeo = new THREE.RingGeometry(data.radio + 4, data.radio + 12, 64);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xe6c280, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2.3;
+        group.add(ring);
+      }
+
+      if (data.distancia > 0) {
+        const orbitGeo = new THREE.BufferGeometry();
+        const points = [];
+        for (let i = 0; i <= 128; i++) {
+          const theta = (i / 128) * Math.PI * 2;
+          points.push(new THREE.Vector3(Math.cos(theta) * data.distancia, 0, Math.sin(theta) * data.distancia));
+        }
+        orbitGeo.setFromPoints(points);
+        scene.add(new THREE.Line(orbitGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 })));
+      }
+
+      const angle = (index / sistemaSolarData.length) * Math.PI * 2;
+      group.position.set(Math.cos(angle) * data.distancia, 0, Math.sin(angle) * data.distancia);
+
+      // Palabras Iniciales del Código
+      const wordsGroup = new THREE.Group();
+      data.palabras.forEach((txt) => {
+        const sprite = createTextSprite(txt);
+        const r = data.radio + 4 + Math.random() * 8;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+        sprite.position.set(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
+        wordsGroup.add(sprite);
+        interactiveObjects.push(sprite);
+      });
+      wordsGroup.visible = (index === 0);
+      group.add(wordsGroup);
+      wordGroups.push(wordsGroup);
+
+      data.lunas.forEach((lunaData) => {
+        const moonPivot = new THREE.Group();
+        group.add(moonPivot);
+        const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(lunaData.radio, 32, 32), new THREE.MeshStandardMaterial({ color: lunaData.color, roughness: 0.8 }));
+        moonMesh.position.x = lunaData.distancia;
+        moonPivot.add(moonMesh);
+        moonsList.push({ pivot: moonPivot, speed: 0.015 });
+      });
+
+      scene.add(group);
+      planetMeshes.push(group);
+      interactiveObjects.push(mesh);
+    });
+
+    function agregarPalabra3D(planetaIdx, texto, docId = null) {
+      const wordsGroup = wordGroups[planetaIdx];
+      const data = sistemaSolarData[planetaIdx];
+
+      const sprite = createTextSprite(texto);
+      sprite.userData.docId = docId;
+      const r = data.radio + 4 + Math.random() * 8;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      sprite.position.set(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
+
+      wordsGroup.add(sprite);
+      interactiveObjects.push(sprite);
+    }
+
+    function agregarMedia3D(planetaIdx, mediaSrc, esVideo = false, docId = null) {
+      const group = planetMeshes[planetaIdx];
+      const data = sistemaSolarData[planetaIdx];
+      const cardGroup = new THREE.Group();
+
+      if (!esVideo) {
+        const frameMesh = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 4.8), new THREE.MeshBasicMaterial({ color: 0xff69b4, side: THREE.DoubleSide }));
+        cardGroup.add(frameMesh);
+
+        const photoMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+        textureLoader.load(mediaSrc, (tex) => {
+          photoMat.map = tex;
+          photoMat.needsUpdate = true;
+        });
+        const photoMesh = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 4.0), photoMat);
+        photoMesh.position.set(0, 0.2, 0.02);
+        photoMesh.userData = { isPhoto: true, src: mediaSrc, docId: docId, planetaIdx: planetaIdx, parentGroup: cardGroup };
+        cardGroup.add(photoMesh);
+        interactiveObjects.push(photoMesh);
+
+        const badge = createBadgeSprite('📸 FOTO', '#ff1493');
+        badge.position.set(0, 3.2, 0);
+        cardGroup.add(badge);
+      } else {
+        const frameMesh = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 4.0), new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide }));
+        cardGroup.add(frameMesh);
+
+        const videoElem = document.createElement('video');
+        videoElem.src = mediaSrc;
+        videoElem.loop = true; videoElem.muted = true; videoElem.playsInline = true;
+        videoElem.play().catch(() => {});
+
+        const videoMesh = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 3.6), new THREE.MeshBasicMaterial({ map: new THREE.VideoTexture(videoElem), side: THREE.DoubleSide }));
+        videoMesh.position.set(0, 0, 0.02);
+        videoMesh.userData = { isVideo: true, src: mediaSrc, videoElem: videoElem, docId: docId, planetaIdx: planetaIdx, parentGroup: cardGroup };
+        cardGroup.add(videoMesh);
+        interactiveObjects.push(videoMesh);
+        videoElements3D.push(videoElem);
+
+        const badge = createBadgeSprite('▶ VIDEO', '#00bfff');
+        badge.position.set(0, 2.7, 0);
+        cardGroup.add(badge);
+      }
+
+      const angleOffset = Math.random() * Math.PI * 2;
+      const dist = data.radio + 8 + Math.random() * 4;
+      const height = (Math.random() - 0.5) * 8;
+      cardGroup.position.set(Math.cos(angleOffset) * dist, height, Math.sin(angleOffset) * dist);
+
+      group.add(cardGroup);
+      mediaGroupsToOrient.push(cardGroup);
+    }
+
+    async function sincronizarFirebase() {
+      onSnapshot(collection(db, "media"), (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            agregarMedia3D(data.planetaIdx, data.src, data.esVideo, change.doc.id);
+          }
+          if (change.type === "removed") {
+            const docId = change.doc.id;
+            interactiveObjects.forEach(obj => {
+              if (obj.userData.docId === docId) {
+                const parent = obj.userData.parentGroup;
+                if (parent) {
+                  scene.remove(parent);
+                  planetMeshes[obj.userData.planetaIdx].remove(parent);
+                }
+                interactiveObjects.splice(interactiveObjects.indexOf(obj), 1);
+              }
+            });
+          }
+        });
+      });
+
+      onSnapshot(collection(db, "palabras"), (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            agregarPalabra3D(data.planetaIdx, data.texto, change.doc.id);
+          }
+          if (change.type === "removed") {
+            const docId = change.doc.id;
+            interactiveObjects.forEach(obj => {
+              if (obj.userData.docId === docId) {
+                obj.parent.remove(obj);
+                interactiveObjects.splice(interactiveObjects.indexOf(obj), 1);
+              }
+            });
+          }
+        });
+      });
+    }
+
+    document.getElementById('input-media').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      const esVideo = file.type.startsWith('video/');
+
+      reader.onload = async function(evt) {
+        const dataUrl = evt.target.result;
+        try {
+          await addDoc(collection(db, "media"), {
+            planetaIdx: planetaActualIndex,
+            src: dataUrl,
+            esVideo: esVideo,
+            timestamp: Date.now()
+          });
+        } catch (err) {
+          alert("Error al subir a la nube. Verifica tu conexión.");
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('btn-add-word').addEventListener('click', async () => {
+      const texto = prompt("Escribe una frase o palabra especial para este planeta:");
+      if (texto && texto.trim() !== "") {
+        try {
+          await addDoc(collection(db, "palabras"), {
+            planetaIdx: planetaActualIndex,
+            texto: texto.trim(),
+            timestamp: Date.now()
+          });
+        } catch (err) {
+          alert("Error al guardar la frase.");
+        }
+      }
+    });
+
+    const btnDelete = document.getElementById('btn-delete-mode');
+    btnDelete.addEventListener('click', () => {
+      modoEliminar = !modoEliminar;
+      if (modoEliminar) {
+        btnDelete.classList.add('active-delete');
+        btnDelete.innerText = '⚠️ Toca elemento a borrar';
+      } else {
+        btnDelete.classList.remove('active-delete');
+        btnDelete.innerText = '🗑️ Eliminar';
+      }
+    });
+
+    let planetaActualIndex = 0;
+    let navegando = false;
+
+    function enfocarPlaneta(index) {
+      navegando = true;
+      planetaActualIndex = index;
+
+      wordGroups.forEach((wg, idx) => { wg.visible = (idx === index); });
+
+      const targetGroup = planetMeshes[index];
+      const data = sistemaSolarData[index];
+      const targetPos = targetGroup.position.clone();
+      const offset = new THREE.Vector3(0, data.radio * 1.8, data.radio * 3.8);
+      const camTargetPos = targetPos.clone().add(offset);
+
+      new TWEEN.Tween(camera.position)
+        .to(camTargetPos, 2000)
+        .easing(TWEEN.Easing.Cubic.InOut)
+        .onUpdate(() => controls.target.copy(targetPos))
+        .onComplete(() => { navegando = false; })
+        .start();
+
+      new TWEEN.Tween(controls.target)
+        .to(targetPos, 2000)
+        .easing(TWEEN.Easing.Cubic.InOut)
+        .start();
+
+      document.getElementById('planet-title').innerText = data.nombre;
+      actualizarMusica();
+    }
+
+    const audio = document.getElementById('musica');
+    const audioSource = document.getElementById('audio-source');
+    const btnAudio = document.getElementById('btn-audio');
+
+    function actualizarMusica() {
+      const data = sistemaSolarData[planetaActualIndex];
+      if (data.audio) {
+        audioSource.src = data.audio;
+        audio.load();
+        audio.play().catch(() => {});
+        btnAudio.innerText = '⏸ Música';
+      }
+    }
+
+    window.iniciarExperiencia = function() {
+      document.getElementById('welcome-screen').style.display = 'none';
+      sincronizarFirebase();
+      videoElements3D.forEach(v => v.play().catch(() => {}));
+      enfocarPlaneta(0);
+    }
+
+    btnAudio.addEventListener('click', () => {
+      if (audio.paused) {
+        audio.play();
+        btnAudio.innerText = '⏸ Música';
+      } else {
+        audio.pause();
+        btnAudio.innerText = '🎵 Música';
+      }
+    });
+
+    document.getElementById('btn-next').addEventListener('click', () => {
+      const siguiente = (planetaActualIndex + 1) % sistemaSolarData.length;
+      enfocarPlaneta(siguiente);
+    });
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let startX = 0, startY = 0;
+
+    window.addEventListener('pointerdown', (e) => {
+      startX = e.clientX; startY = e.clientY;
+    });
+
+    window.addEventListener('pointerup', async (e) => {
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'LABEL' || navegando || document.getElementById('welcome-screen').style.display !== 'none') return;
+      if (Math.abs(e.clientX - startX) > 8 || Math.abs(e.clientY - startY) > 8) return;
+
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(interactiveObjects);
+
+      if (intersects.length > 0) {
+        const obj = intersects[0].object;
+
+        if (modoEliminar) {
+          if (obj.userData.isPhoto || obj.userData.isVideo) {
+            if (confirm("¿Deseas eliminar este elemento multimedia de la nube?")) {
+              try {
+                await deleteDoc(doc(db, "media", obj.userData.docId));
+              } catch (err) {
+                alert("No se pudo eliminar.");
+              }
+            }
+          } else if (obj.userData.isWord) {
+            if (confirm(`¿Deseas eliminar la palabra "${obj.userData.text}"?`)) {
+              try {
+                await deleteDoc(doc(db, "palabras", obj.userData.docId));
+              } catch (err) {
+                alert("No se pudo eliminar.");
+              }
+            }
+          }
+          btnDelete.click();
+          return;
+        }
+
+        if (obj.userData.isBody) {
+          enfocarPlaneta(obj.userData.index);
+        } else if (obj.userData.isPhoto) {
+          document.getElementById('modal-video').style.display = 'none';
+          document.getElementById('modal-video').pause();
+          const img = document.getElementById('modal-img');
+          img.src = obj.userData.src;
+          img.style.display = 'block';
+          document.getElementById('modal').style.display = 'flex';
+        } else if (obj.userData.isVideo) {
+          document.getElementById('modal-img').style.display = 'none';
+          const modalVideo = document.getElementById('modal-video');
+          modalVideo.src = obj.userData.src;
+          modalVideo.style.display = 'block';
+          document.getElementById('modal').style.display = 'flex';
+          modalVideo.play().catch(() => {});
+        }
+      }
+    });
+
+    function cerrarModal() {
+      document.getElementById('modal').style.display = 'none';
+      document.getElementById('modal-video').pause();
+    }
+
+    function animate(time) {
+      requestAnimationFrame(animate);
+      TWEEN.update(time);
+
+      planetMeshes.forEach(group => group.children[0].rotation.y += 0.004);
+      moonsList.forEach(m => m.pivot.rotation.y += m.speed);
+      starField.rotation.y += 0.0002;
+
+      mediaGroupsToOrient.forEach(group => {
+        group.lookAt(camera.position);
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+  </script>
+</body>
+</html>
